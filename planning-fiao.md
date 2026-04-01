@@ -84,7 +84,7 @@ Desarrollar un sistema que permita a los colmados gestionar el crédito ("fiao")
 ## 📌 Backend / Frontend (MVP Integrado)
 - [ ] Construir con React, Vite y TypeScript
 - [ ] CRUD de clientes (listo en UI MVP)
-- [ ] CRUD de ventas (diseño planificado)
+- [x] CRUD de ventas (diseño listo y prototipado)
 - [ ] CRUD de pagos (diseño planificado)
 - [ ] Implementar lógica de crédito
 

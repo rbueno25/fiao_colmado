@@ -5,6 +5,7 @@ import './index.css';
 import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
 import Clientes from './pages/Clientes';
+import Ventas from './pages/Ventas';
 
 function Sidebar() {
   const location = useLocation();
@@ -71,7 +72,7 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/clientes" element={<Clientes />} />
           {/* MVP placeholders for other routes */}
-          <Route path="/ventas" element={<div className="animate-fade-in"><h1 className="text-h2">Módulo de Ventas</h1><p className="text-muted mb-6">Próximamente en el MVP...</p></div>} />
+          <Route path="/ventas" element={<Ventas />} />
           <Route path="/pagos" element={<div className="animate-fade-in"><h1 className="text-h2">Módulo de Pagos</h1><p className="text-muted mb-6">Próximamente en el MVP...</p></div>} />
           <Route path="/reportes" element={<div className="animate-fade-in"><h1 className="text-h2">Reportes</h1><p className="text-muted mb-6">Próximamente en el MVP...</p></div>} />
         </Routes>
