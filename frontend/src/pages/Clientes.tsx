@@ -13,11 +13,13 @@ export default function Clientes() {
   const [nombre, setNombre] = useState('');
   const [telefono, setTelefono] = useState('');
   const [cedula, setCedula] = useState('');
-  const [limite, setLimite] = useState(3000);
+  const [limite, setLimite] = useState<string>('3000');
+
+  const API = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
   const fetchClientes = async () => {
     try {
-      const res = await fetch("http://localhost:3000/api/clientes");
+      const res = await fetch(`${API}/api/clientes`);
       if (res.ok) {
         const data = await res.json();
         setClients(data);
@@ -58,10 +60,10 @@ export default function Clientes() {
       setNombre(client.nombre);
       setTelefono(client.telefono || '');
       setCedula(client.cedula || '');
-      setLimite(Number(client.limite));
+      setLimite(client.limite.toString());
     } else {
       setEditClient(null);
-      setNombre(''); setTelefono(''); setCedula(''); setLimite(3000);
+      setNombre(''); setTelefono(''); setCedula(''); setLimite('3000');
     }
     setIsModalOpen(true);
   };
@@ -71,8 +73,8 @@ export default function Clientes() {
     try {
       const method = editClient ? "PUT" : "POST";
       const url = editClient 
-        ? `http://localhost:3000/api/clientes/${editClient.id}` 
-        : "http://localhost:3000/api/clientes";
+        ? `${API}/api/clientes/${editClient.id}` 
+        : `${API}/api/clientes`;
 
       const res = await fetch(url, {
         method,
@@ -87,7 +89,7 @@ export default function Clientes() {
       }
 
       setIsModalOpen(false);
-      setNombre(''); setTelefono(''); setCedula(''); setLimite(3000);
+      setNombre(''); setTelefono(''); setCedula(''); setLimite('3000');
       fetchClientes();
     } catch (e) {
       console.error(e);
@@ -99,7 +101,7 @@ export default function Clientes() {
     if(!confirm("¿Estás seguro de que quieres eliminar a este cliente permanentemente?")) return;
 
     try {
-      await fetch(`http://localhost:3000/api/clientes/${id}`, {
+      await fetch(`${API}/api/clientes/${id}`, {
         method: "DELETE"
       });
       fetchClientes();
@@ -255,7 +257,15 @@ export default function Clientes() {
               </div>
               <div>
                 <label className="text-muted mb-1" style={{ display: 'block', fontSize: '0.875rem' }}>Limite de Credito Permitido (RD$) *</label>
-                <input type="number" className="input" placeholder="Ej: 5000" required value={limite} onChange={e => setLimite(Number(e.target.value))} min="0" />
+                <input 
+                  type="number" 
+                  className="input" 
+                  placeholder="Ej: 5000" 
+                  required 
+                  value={limite} 
+                  onChange={e => setLimite(e.target.value)} 
+                  min="0" 
+                />
               </div>
 
               <div className="flex justify-end gap-2 mt-4">

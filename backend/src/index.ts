@@ -70,6 +70,23 @@ const startServer = async () => {
         }
     });
 
+    app.put("/api/usuarios/:id", async (req, res) => {
+        try {
+            const { username, password, rol } = req.body;
+            const user = await userRepository.findOneBy({ id: Number(req.params.id) });
+            if (!user) return res.status(404).json({ message: "Usuario no encontrado" });
+            
+            user.username = username || user.username;
+            if (password) user.password = password; // Solo si se provee una nueva
+            user.rol = rol || user.rol;
+            
+            await userRepository.save(user);
+            res.json({ message: "Usuario actualizado" });
+        } catch (error) {
+            res.status(400).json({ message: "Error al actualizar usuario" });
+        }
+    });
+
     app.delete("/api/usuarios/:id", async (req, res) => {
         await userRepository.delete(req.params.id);
         res.json({ message: "Usuario eliminado" });
@@ -236,6 +253,50 @@ const startServer = async () => {
     app.get("/api/clientes", async (req, res) => {
         const clients = await clientRepository.find();
         res.json(clients);
+    });
+
+    app.post("/api/clientes", async (req, res) => {
+        try {
+            const { nombre, telefono, cedula, limite } = req.body;
+            const newClient = new Cliente();
+            newClient.nombre = nombre;
+            newClient.telefono = telefono;
+            newClient.cedula = cedula;
+            newClient.limite = Number(limite);
+            newClient.deuda = 0;
+            newClient.estado = 'activo';
+            await clientRepository.save(newClient);
+            res.status(201).json(newClient);
+        } catch (error) {
+            res.status(400).json({ message: "Error al crear cliente" });
+        }
+    });
+
+    app.put("/api/clientes/:id", async (req, res) => {
+        try {
+            const { nombre, telefono, cedula, limite } = req.body;
+            const client = await clientRepository.findOneBy({ id: Number(req.params.id) });
+            if (!client) return res.status(404).json({ message: "Cliente no encontrado" });
+            
+            client.nombre = nombre || client.nombre;
+            client.telefono = telefono || client.telefono;
+            client.cedula = cedula || client.cedula;
+            client.limite = Number(limite) || client.limite;
+            
+            await clientRepository.save(client);
+            res.json(client);
+        } catch (error) {
+            res.status(400).json({ message: "Error al actualizar cliente" });
+        }
+    });
+
+    app.delete("/api/clientes/:id", async (req, res) => {
+        try {
+            await clientRepository.delete(req.params.id);
+            res.json({ message: "Cliente eliminado" });
+        } catch (error) {
+            res.status(400).json({ message: "Error al eliminar cliente" });
+        }
     });
 
     // Start server
