@@ -139,30 +139,47 @@ const startServer = async () => {
     // --- REPORTES ---
     app.get("/api/reportes/auditoria-diaria", async (req, res) => {
         try {
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            const tomorrow = new Date(today);
-            tomorrow.setDate(tomorrow.getDate() + 1);
+            const { periodo, month, year } = req.query;
+            let startDate = new Date();
+            let endDate = new Date();
+
+            if (periodo === 'mensual' && month && year) {
+                startDate = new Date(Number(year), Number(month) - 1, 1);
+                endDate = new Date(Number(year), Number(month), 0, 23, 59, 59);
+            } else if (periodo === 'semanal') {
+                // Inicio de la semana (Lunes)
+                const day = startDate.getDay();
+                const diff = startDate.getDate() - day + (day === 0 ? -6 : 1); 
+                startDate.setDate(diff);
+                startDate.setHours(0, 0, 0, 0);
+                endDate = new Date(startDate);
+                endDate.setDate(startDate.getDate() + 7);
+            } else {
+                // Diario (Default)
+                startDate.setHours(0, 0, 0, 0);
+                endDate = new Date(startDate);
+                endDate.setDate(startDate.getDate() + 1);
+            }
 
             const { Between } = require("typeorm");
 
-            const salesToday = await saleRepository.find({
-                where: { fecha: Between(today, tomorrow) }
+            const salesInRange = await saleRepository.find({
+                where: { fecha: Between(startDate, endDate) }
             });
 
-            const paymentsToday = await paymentRepository.find({
-                where: { fecha: Between(today, tomorrow) }
+            const paymentsInRange = await paymentRepository.find({
+                where: { fecha: Between(startDate, endDate) }
             });
 
             const lowStockProducts = await productRepository.find({
-                where: { stock: Between(-999, 10) } // Menos de 10 unidades
+                where: { stock: Between(-999, 10) }
             });
 
             const summary = {
-                totalVentas: salesToday.reduce((acc, s) => acc + Number(s.montoTotal), 0),
-                ventasContado: salesToday.filter(s => s.tipo === 'contado').reduce((acc, s) => acc + Number(s.montoTotal), 0),
-                ventasCredito: salesToday.filter(s => s.tipo === 'credito').reduce((acc, s) => acc + Number(s.montoTotal), 0),
-                cobrosRealizados: paymentsToday.reduce((acc, p) => acc + Number(p.monto), 0),
+                totalVentas: salesInRange.reduce((acc, s) => acc + Number(s.montoTotal), 0),
+                ventasContado: salesInRange.filter(s => s.tipo === 'contado').reduce((acc, s) => acc + Number(s.montoTotal), 0),
+                ventasCredito: salesInRange.filter(s => s.tipo === 'credito').reduce((acc, s) => acc + Number(s.montoTotal), 0),
+                cobrosRealizados: paymentsInRange.reduce((acc, p) => acc + Number(p.monto), 0),
                 productosBajoStock: lowStockProducts.length,
                 detalleBajoStock: lowStockProducts.map(p => ({ nombre: p.nombre, stock: p.stock }))
             };

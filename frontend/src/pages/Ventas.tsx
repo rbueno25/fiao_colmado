@@ -18,7 +18,7 @@ interface Client {
   nombre: string;
   telefono: string;
   deuda: number;
-  limiteCredito?: number;
+  limite: number;
 }
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3000';
@@ -110,8 +110,15 @@ export default function Ventas() {
   const total = cart.reduce((acc, item) => acc + item.precio * item.cantidad, 0);
 
   const isBlocked = tipoPago === 'credito' && selectedClient &&
-    selectedClient.limiteCredito !== undefined &&
-    Number(selectedClient.deuda) >= Number(selectedClient.limiteCredito);
+    selectedClient.limite !== undefined &&
+    Number(selectedClient.deuda) >= Number(selectedClient.limite);
+
+  // Alerta cuando se selecciona un cliente bloqueado
+  useEffect(() => {
+    if (selectedClient && Number(selectedClient.deuda) >= Number(selectedClient.limite)) {
+      alert(`⚠️ ADVERTENCIA: ${selectedClient.nombre} ha excedido su límite de crédito (RD$ ${Number(selectedClient.limite).toLocaleString()}). No se le puede fiar hasta que realice un abono.`);
+    }
+  }, [selectedClient]);
 
   const canSubmit = cart.length > 0 &&
     !submitting &&

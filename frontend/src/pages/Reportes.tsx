@@ -13,20 +13,25 @@ interface DailyAudit {
 export default function Reportes() {
   const [loading, setLoading] = useState(true);
   const [audit, setAudit] = useState<DailyAudit | null>(null);
+  const [periodo, setPeriodo] = useState<'diario' | 'semanal' | 'mensual'>('diario');
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+
+  const fetchAudit = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/reportes/auditoria-diaria?periodo=${periodo}&month=${selectedMonth}&year=${selectedYear}`);
+      if (res.ok) setAudit(await res.json());
+    } catch (e) {
+      console.error("Error fetching audit", e);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchAudit = async () => {
-      try {
-        const res = await fetch(`${import.meta.env.VITE_API_URL}/api/reportes/auditoria-diaria`);
-        if (res.ok) setAudit(await res.json());
-      } catch (e) {
-        console.error("Error fetching audit", e);
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchAudit();
-  }, []);
+  }, [periodo, selectedMonth, selectedYear]);
 
   const downloadReport = () => {
     if (!audit) return;
@@ -82,15 +87,63 @@ ${audit.detalleBajoStock.length > 0
     <div className="animate-fade-in" style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
-          <h1 className="text-h1">Reportes y Auditoría</h1>
-          <p className="text-muted">Análisis diario de la situación financiera del colmado.</p>
+          <p className="text-muted">Análisis periódico de la situación financiera del colmado.</p>
         </div>
-        <button 
-          onClick={downloadReport}
-          className="btn btn-primary"
-        >
-          <Download size={18} /> Descargar Auditoría
-        </button>
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* Selector de Periodo */}
+          <div style={{ display: 'flex', background: '#f3f4f6', padding: '0.25rem', borderRadius: '10px', border: '1px solid var(--border)' }}>
+            {(['diario', 'semanal', 'mensual'] as const).map((p) => (
+              <button
+                key={p}
+                onClick={() => setPeriodo(p)}
+                style={{
+                  padding: '0.5rem 1rem',
+                  borderRadius: '8px',
+                  border: 'none',
+                  fontSize: '0.85rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  textTransform: 'capitalize',
+                  background: periodo === p ? 'white' : 'transparent',
+                  color: periodo === p ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                  boxShadow: periodo === p ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                  transition: 'all 0.2s'
+                }}
+              >
+                {p}
+              </button>
+            ))}
+          </div>
+
+          {/* Selectores de Mes/Año (Solo si es mensual) */}
+          {periodo === 'mensual' && (
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <select 
+                value={selectedMonth} 
+                onChange={(e) => setSelectedMonth(Number(e.target.value))}
+                style={{ padding: '0.55rem 0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'white', fontSize: '0.85rem' }}
+              >
+                {['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'].map((m, i) => (
+                  <option key={m} value={i + 1}>{m}</option>
+                ))}
+              </select>
+              <select 
+                value={selectedYear} 
+                onChange={(e) => setSelectedYear(Number(e.target.value))}
+                style={{ padding: '0.55rem 0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'white', fontSize: '0.85rem' }}
+              >
+                {[2024, 2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}
+              </select>
+            </div>
+          )}
+
+          <button 
+            onClick={downloadReport}
+            className="btn btn-primary"
+          >
+            <Download size={18} /> Descargar Auditoría
+          </button>
+        </div>
       </div>
 
       {audit && (
@@ -99,7 +152,9 @@ ${audit.detalleBajoStock.length > 0
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.5rem' }}>
             <div className="card" style={{ borderLeft: '4px solid var(--color-primary)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                <h3 className="text-muted" style={{ fontSize: '0.875rem', fontWeight: 600, textTransform: 'uppercase' }}>Ventas Totales</h3>
+                <h3 className="text-muted" style={{ fontSize: '0.875rem', fontWeight: 600, textTransform: 'uppercase' }}>
+                  Ventas {periodo === 'diario' ? 'de Hoy' : periodo === 'semanal' ? 'de la Semana' : 'del Mes'}
+                </h3>
                 <div style={{ background: 'hsl(var(--color-primary) / 0.15)', padding: '0.5rem', borderRadius: '50%', color: 'hsl(var(--color-primary))' }}>
                   <TrendingUp size={20} />
                 </div>
