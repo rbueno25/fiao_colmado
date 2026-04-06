@@ -1,42 +1,78 @@
-import { useState } from 'react';
-import { Search, ShoppingCart, User, Plus, Minus, X, Check, AlertCircle } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Search, ShoppingCart, User, Plus, Minus, X, Check, AlertCircle, Tag, RefreshCw, Package } from 'lucide-react';
 
 interface Product {
-  id: string;
+  id: number;
   nombre: string;
   precio: number;
   stock: number;
-  category: string;
+  categoria?: string;
 }
 
 interface CartItem extends Product {
   cantidad: number;
 }
 
-const mockProducts: Product[] = [
-  { id: '1', nombre: 'Arroz Premium (lb)', precio: 45, stock: 50, category: 'Granos' },
-  { id: '2', nombre: 'Aceite de Girasol (lt)', precio: 180, stock: 20, category: 'Aceites' },
-  { id: '3', nombre: 'Leche Entera (lt)', precio: 75, stock: 35, category: 'Lácteos' },
-  { id: '4', nombre: 'Habichuelas Rojas (lb)', precio: 60, stock: 30, category: 'Granos' },
-  { id: '5', nombre: 'Salami Induveca (lb)', precio: 125, stock: 15, category: 'Embutidos' },
-  { id: '6', nombre: 'Café Molido (oz)', precio: 25, stock: 100, category: 'Café' },
-];
+interface Client {
+  id: number;
+  nombre: string;
+  telefono: string;
+  deuda: number;
+  limiteCredito?: number;
+}
+
+const API = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 export default function Ventas() {
-  const [searchTerm, setSearchTerm] = useState('');
+  const [products, setProducts] = useState<Product[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [selectedClient, setSelectedClient] = useState<string>('');
-  const [isCredit, setIsCredit] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('Todos');
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  const [tipoPago, setTipoPago] = useState<'contado' | 'credito'>('contado');
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [error, setError] = useState('');
 
-  const filteredProducts = mockProducts.filter(p => 
-    p.nombre.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const [prodRes, clientRes] = await Promise.all([
+        fetch(`${API}/api/productos`),
+        fetch(`${API}/api/clientes`)
+      ]);
+      const prodData = await prodRes.json();
+      const clientData = await clientRes.json();
+      setProducts(Array.isArray(prodData) ? prodData : []);
+      setClients(Array.isArray(clientData) ? clientData : []);
+    } catch {
+      // silently handle
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const categories = ['Todos', ...Array.from(new Set(products.map(p => p.categoria || 'General')))];
+
+  const filteredProducts = products.filter(p => {
+    const matchSearch = p.nombre.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchCat = selectedCategory === 'Todos' || (p.categoria || 'General') === selectedCategory;
+    return matchSearch && matchCat;
+  });
 
   const addToCart = (product: Product) => {
+    if (product.stock <= 0) return;
     setCart(prev => {
       const existing = prev.find(item => item.id === product.id);
       if (existing) {
-        return prev.map(item => 
+        if (existing.cantidad >= product.stock) return prev;
+        return prev.map(item =>
           item.id === product.id ? { ...item, cantidad: item.cantidad + 1 } : item
         );
       }
@@ -44,14 +80,16 @@ export default function Ventas() {
     });
   };
 
-  const removeFromCart = (productId: string) => {
+  const removeFromCart = (productId: number) => {
     setCart(prev => prev.filter(item => item.id !== productId));
   };
 
-  const updateQuantity = (productId: string, delta: number) => {
+  const updateQuantity = (productId: number, delta: number) => {
     setCart(prev => prev.map(item => {
       if (item.id === productId) {
-        const newQty = Math.max(1, item.cantidad + delta);
+        const newQty = item.cantidad + delta;
+        if (newQty <= 0) return item; // don't go below 1
+        if (newQty > item.stock) return item; // respect stock
         return { ...item, cantidad: newQty };
       }
       return item;
@@ -60,139 +98,323 @@ export default function Ventas() {
 
   const total = cart.reduce((acc, item) => acc + item.precio * item.cantidad, 0);
 
+  const isBlocked = tipoPago === 'credito' && selectedClient &&
+    selectedClient.limiteCredito !== undefined &&
+    Number(selectedClient.deuda) >= Number(selectedClient.limiteCredito);
+
+  const canSubmit = cart.length > 0 &&
+    !submitting &&
+    (tipoPago === 'contado' || (tipoPago === 'credito' && selectedClient && !isBlocked));
+
+  const handleVenta = async () => {
+    if (!canSubmit) {
+      if (tipoPago === 'credito' && !selectedClient) {
+        setError('Debes seleccionar un cliente para ventas a crédito.');
+      }
+      return;
+    }
+    setSubmitting(true);
+    setError('');
+    try {
+      const payload = {
+        clienteId: selectedClient?.id || null,
+        tipo: tipoPago,
+        montoTotal: total,
+        items: cart.map(item => ({
+          id: item.id,
+          cantidad: item.cantidad,
+          subtotal: item.precio * item.cantidad,
+        }))
+      };
+
+      const res = await fetch(`${API}/api/ventas`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (res.ok) {
+        setSuccess(true);
+        setCart([]);
+        setSelectedClient(null);
+        setTipoPago('contado');
+        await fetchData();
+        setTimeout(() => setSuccess(false), 4000);
+      } else {
+        const err = await res.json();
+        setError(err.message || 'Error al registrar la venta.');
+      }
+    } catch {
+      setError('Error de conexión con el servidor.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
-    <div className="animate-fade-in" style={{ maxWidth: '1400px', margin: '0 auto' }}>
-      <div className="flex justify-between items-center mb-8">
+    <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', height: 'calc(100vh - 2rem)' }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
         <div>
-          <h1 className="text-h1">Ventas</h1>
-          <p className="text-muted">Procesa ventas al contado o "fiao" a tus clientes.</p>
+          <h1 className="text-h2">Punto de Venta</h1>
+          <p className="text-muted">Registra ventas al contado o a crédito (fiao).</p>
         </div>
+        <button onClick={fetchData} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 1rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--bg-secondary)', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+          <RefreshCw size={15} /> Actualizar
+        </button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Left: Product Selection */}
-        <div className="lg:col-span-2 space-y-6">
-          <div className="card" style={{ padding: '1rem' }}>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={20} />
-              <input 
-                type="text" 
-                placeholder="Buscar productos por nombre o categoría..." 
-                className="input"
-                style={{ paddingLeft: '2.75rem' }}
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
+      {/* Success Banner */}
+      {success && (
+        <div style={{ background: 'linear-gradient(135deg, #10b981, #059669)', color: 'white', padding: '0.875rem 1.25rem', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '0.75rem', fontWeight: 600, flexShrink: 0 }}>
+          <Check size={18} /> ¡Venta registrada exitosamente! El stock ha sido actualizado.
+        </div>
+      )}
+
+      {/* Main POS layout */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: '1.25rem', flex: 1, minHeight: 0 }}>
+
+        {/* LEFT: Product catalog */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem', minHeight: 0 }}>
+          {/* Search + Category Filter */}
+          <div className="card" style={{ padding: '1rem', flexShrink: 0 }}>
+            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+              <div style={{ position: 'relative', flex: 1 }}>
+                <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                <input
+                  type="text"
+                  placeholder="Buscar producto..."
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                  style={{ width: '100%', padding: '0.6rem 0.75rem 0.6rem 2.25rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--bg-secondary)', color: 'var(--text-main)', fontSize: '0.9rem', boxSizing: 'border-box' }}
+                />
+              </div>
+              <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                {categories.map(cat => (
+                  <button
+                    key={cat}
+                    onClick={() => setSelectedCategory(cat)}
+                    style={{
+                      padding: '0.4rem 0.875rem', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', border: '1px solid',
+                      borderColor: selectedCategory === cat ? 'var(--primary)' : 'var(--border)',
+                      background: selectedCategory === cat ? 'var(--primary)' : 'var(--bg-secondary)',
+                      color: selectedCategory === cat ? 'white' : 'var(--text-muted)',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-            {filteredProducts.map(product => (
-              <div key={product.id} className="card hover:border-primary cursor-pointer transition-all" onClick={() => addToCart(product)}>
-                <div className="flex justify-between items-start mb-2">
-                  <span style={{ fontSize: '0.75rem', padding: '0.2rem 0.5rem', background: 'hsl(var(--color-bg-base))', borderRadius: '1rem', color: 'hsl(var(--color-text-muted))' }}>
-                    {product.category}
-                  </span>
-                  <span className={product.stock < 10 ? 'text-danger font-600' : 'text-success'} style={{ fontSize: '0.75rem' }}>
-                    S: {product.stock}
-                  </span>
-                </div>
-                <h3 className="font-600" style={{ fontSize: '1rem', marginBottom: '0.5rem' }}>{product.nombre}</h3>
-                <div className="flex justify-between items-center mt-4">
-                  <span className="text-h3" style={{ color: 'hsl(var(--color-primary))' }}>RD$ {product.precio}</span>
-                  <button className="btn btn-secondary" style={{ padding: '0.4rem', minWidth: 'auto', borderRadius: '50%' }}>
-                    <Plus size={16} />
-                  </button>
-                </div>
+          {/* Product grid */}
+          <div style={{ flex: 1, overflowY: 'auto' }}>
+            {loading ? (
+              <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                <RefreshCw size={32} style={{ opacity: 0.3, marginBottom: '0.75rem', animation: 'spin 1s linear infinite' }} />
+                <p>Cargando productos...</p>
               </div>
-            ))}
+            ) : filteredProducts.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                <Package size={40} style={{ opacity: 0.2, marginBottom: '0.75rem' }} />
+                <p>No se encontraron productos.</p>
+                <p style={{ fontSize: '0.8rem', marginTop: '0.25rem' }}>Agrega productos desde la base de datos.</p>
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '0.875rem', paddingRight: '0.25rem' }}>
+                {filteredProducts.map(product => {
+                  const inCart = cart.find(c => c.id === product.id);
+                  const outOfStock = product.stock <= 0;
+                  return (
+                    <div
+                      key={product.id}
+                      onClick={() => !outOfStock && addToCart(product)}
+                      className="card"
+                      style={{
+                        cursor: outOfStock ? 'not-allowed' : 'pointer',
+                        opacity: outOfStock ? 0.5 : 1,
+                        border: inCart ? '2px solid var(--primary)' : '1px solid var(--border)',
+                        transition: 'all 0.15s ease',
+                        padding: '1rem',
+                        position: 'relative',
+                        userSelect: 'none',
+                      }}
+                    >
+                      {inCart && (
+                        <div style={{ position: 'absolute', top: '0.5rem', right: '0.5rem', background: 'var(--primary)', color: 'white', borderRadius: '50%', width: '22px', height: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700 }}>
+                          {inCart.cantidad}
+                        </div>
+                      )}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                        <span style={{ fontSize: '0.7rem', padding: '0.15rem 0.5rem', background: 'var(--bg-base)', borderRadius: '20px', color: 'var(--text-muted)', fontWeight: 600 }}>
+                          <Tag size={10} style={{ marginRight: '0.2rem', verticalAlign: 'middle' }} />
+                          {product.categoria || 'General'}
+                        </span>
+                        <span style={{ fontSize: '0.7rem', fontWeight: 700, color: product.stock < 10 ? '#ef4444' : '#10b981' }}>
+                          {product.stock} uds
+                        </span>
+                      </div>
+                      <div style={{ fontWeight: 700, fontSize: '0.95rem', lineHeight: 1.3, marginBottom: '0.75rem' }}>{product.nombre}</div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontWeight: 800, fontSize: '1.1rem', color: 'var(--primary)' }}>RD$ {product.precio.toLocaleString()}</span>
+                        <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <Plus size={14} color="white" />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Right: Cart and Sale Info */}
-        <div className="space-y-6">
-          <div className="card sticky top-6 shadow-lg border-primary/20">
-            <h2 className="text-h3 mb-6 flex items-center gap-2">
-              <ShoppingCart size={20} className="text-primary" />
-              Detalle de Venta
-            </h2>
+        {/* RIGHT: Cart */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
+          <div className="card" style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '1.25rem' }}>
+            <div style={{ marginBottom: '1rem', flexShrink: 0 }}>
+              <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700, fontSize: '1rem', marginBottom: '0.875rem' }}>
+                <ShoppingCart size={18} style={{ color: 'var(--primary)' }} />
+                Detalle de Venta
+                {cart.length > 0 && (
+                  <span style={{ marginLeft: 'auto', fontSize: '0.75rem', background: 'var(--primary)', color: 'white', borderRadius: '20px', padding: '0.1rem 0.6rem', fontWeight: 700 }}>
+                    {cart.reduce((a, i) => a + i.cantidad, 0)} items
+                  </span>
+                )}
+              </h2>
 
-            {cart.length === 0 ? (
-              <div className="text-center py-12 text-muted">
-                <ShoppingCart size={48} className="mx-auto mb-4 opacity-20" />
-                <p>El carrito está vacío</p>
-                <p style={{ fontSize: '0.875rem' }}>Selecciona productos de la izquierda</p>
-              </div>
-            ) : (
-              <div className="space-y-4 mb-8 max-h-[400px] overflow-y-auto pr-2">
-                {cart.map(item => (
-                  <div key={item.id} className="flex justify-between items-center group">
-                    <div style={{ flex: 1 }}>
-                      <p className="font-500" style={{ fontSize: '0.925rem' }}>{item.nombre}</p>
-                      <p className="text-muted" style={{ fontSize: '0.75rem' }}>RD$ {item.precio} x {item.cantidad}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                       <button onClick={() => updateQuantity(item.id, -1)} className="btn btn-secondary" style={{ padding: '0.25rem', minWidth: 'auto' }}><Minus size={14} /></button>
-                       <span style={{ minWidth: '1.5rem', textAlign: 'center', fontWeight: 600 }}>{item.cantidad}</span>
-                       <button onClick={() => updateQuantity(item.id, 1)} className="btn btn-secondary" style={{ padding: '0.25rem', minWidth: 'auto' }}><Plus size={14} /></button>
-                       <button onClick={() => removeFromCart(item.id)} className="ml-2 text-danger opacity-40 group-hover:opacity-100 transition-opacity"><X size={16} /></button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div className="pt-6 border-t space-y-6">
-              <div className="flex justify-between items-center">
-                <span className="text-muted">Total a Pagar</span>
-                <span className="text-h2 text-primary">RD$ {total.toLocaleString()}</span>
-              </div>
-
-              <div className="space-y-4">
-                <label className="block text-sm font-500">Seleccionar Cliente</label>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={18} />
-                  <select 
-                    className="input w-full" 
-                    style={{ paddingLeft: '2.5rem' }}
-                    value={selectedClient}
-                    onChange={(e) => setSelectedClient(e.target.value)}
-                  >
-                    <option value="">-- Cliente de Contado --</option>
-                    <option value="1">Juan Pérez (Deuda: RD$ 450, Lim: 5,000)</option>
-                    <option value="2">María Gómez (Deuda: RD$ 1,500, Lim: 2,000)</option>
-                    <option value="3">Luis Martínez (BLOQUEADO - Límite Excedido)</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-4 bg-muted/20 p-3 rounded-lg border border-border">
-                <div className="flex-1">
-                  <p className="text-xs font-600 text-muted uppercase">Método de Venta</p>
-                  <p className="text-sm font-500">{isCredit ? 'Venta a Crédito (Fiao)' : 'Venta de Contado'}</p>
-                </div>
-                <button 
-                  onClick={() => setIsCredit(!isCredit)}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${isCredit ? 'bg-primary' : 'bg-gray-300'}`}
+              {/* Client selector - always visible */}
+              <div style={{ position: 'relative' }}>
+                <User size={15} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', zIndex: 1 }} />
+                <select
+                  value={selectedClient?.id || ''}
+                  onChange={e => {
+                    const client = clients.find(c => c.id === Number(e.target.value)) || null;
+                    setSelectedClient(client);
+                  }}
+                  style={{ width: '100%', padding: '0.65rem 0.75rem 0.65rem 2.25rem', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--bg-secondary)', color: 'var(--text-main)', fontSize: '0.875rem', boxSizing: 'border-box', appearance: 'none' }}
                 >
-                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isCredit ? 'translate-x-6' : 'translate-x-1'}`} />
-                </button>
+                  <option value="">👤 Cliente al contado (sin nombre)</option>
+                  {clients.map(c => (
+                    <option key={c.id} value={c.id}>
+                      {c.nombre}{Number(c.deuda) > 0 ? ` · Deuda: RD$ ${Number(c.deuda).toLocaleString()}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {selectedClient && (
+                <div style={{ marginTop: '0.4rem', padding: '0.4rem 0.75rem', borderRadius: '8px', background: 'var(--bg-secondary)', fontSize: '0.78rem', display: 'flex', justifyContent: 'space-between', border: '1px solid var(--border)' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Deuda actual de {selectedClient.nombre}:</span>
+                  <span style={{ fontWeight: 700, color: Number(selectedClient.deuda) > 0 ? '#ef4444' : '#10b981' }}>RD$ {Number(selectedClient.deuda).toLocaleString()}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Cart items */}
+            <div style={{ flex: 1, overflowY: 'auto', marginBottom: '1rem' }}>
+              {cart.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '2rem 1rem', color: 'var(--text-muted)' }}>
+                  <ShoppingCart size={36} style={{ opacity: 0.2, marginBottom: '0.5rem' }} />
+                  <p style={{ fontSize: '0.875rem' }}>Selecciona productos del catálogo</p>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {cart.map(item => (
+                    <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.625rem 0.75rem', background: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid var(--border)' }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 600, fontSize: '0.85rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.nombre}</div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>RD$ {item.precio.toLocaleString()} c/u</div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexShrink: 0 }}>
+                        <button onClick={() => updateQuantity(item.id, -1)} style={{ width: '22px', height: '22px', borderRadius: '50%', border: '1px solid var(--border)', background: 'var(--bg-base)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <Minus size={11} />
+                        </button>
+                        <span style={{ minWidth: '1.5rem', textAlign: 'center', fontWeight: 700, fontSize: '0.9rem' }}>{item.cantidad}</span>
+                        <button onClick={() => updateQuantity(item.id, 1)} style={{ width: '22px', height: '22px', borderRadius: '50%', border: '1px solid var(--border)', background: 'var(--bg-base)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <Plus size={11} />
+                        </button>
+                      </div>
+                      <div style={{ fontWeight: 700, fontSize: '0.875rem', color: 'var(--primary)', minWidth: '70px', textAlign: 'right' }}>
+                        RD$ {(item.precio * item.cantidad).toLocaleString()}
+                      </div>
+                      <button onClick={() => removeFromCart(item.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', opacity: 0.6, padding: '0.1rem', flexShrink: 0 }}>
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Checkout section */}
+            <div style={{ borderTop: '1px solid var(--border)', paddingTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.875rem', flexShrink: 0 }}>
+              {/* Total */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>Total</span>
+                <span style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--primary)' }}>RD$ {total.toLocaleString()}</span>
               </div>
 
-              {selectedClient === '3' && (
-                <div className="flex items-start gap-2 p-3 bg-danger/10 text-danger text-xs rounded-lg animate-shake">
-                  <AlertCircle size={16} className="mt-0.5 shrink-0" />
-                  <p>Este cliente ha superado su límite de crédito. El sistema no permite ventas adicionales a crédito.</p>
+              {/* Tipo de pago */}
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.4rem' }}>Tipo de Pago</label>
+                <div style={{ display: 'flex', padding: '0.2rem', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '10px', gap: '0.2rem' }}>
+                  <button
+                    onClick={() => setTipoPago('contado')}
+                    style={{ flex: 1, padding: '0.55rem', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer', border: 'none', transition: 'all 0.15s ease', background: tipoPago === 'contado' ? 'white' : 'transparent', color: tipoPago === 'contado' ? 'var(--primary)' : 'var(--text-muted)', boxShadow: tipoPago === 'contado' ? '0 1px 4px rgba(0,0,0,0.1)' : 'none' }}
+                  >
+                    💵 Contado
+                  </button>
+                  <button
+                    onClick={() => setTipoPago('credito')}
+                    style={{ flex: 1, padding: '0.55rem', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer', border: 'none', transition: 'all 0.15s ease', background: tipoPago === 'credito' ? 'var(--primary)' : 'transparent', color: tipoPago === 'credito' ? 'white' : 'var(--text-muted)', boxShadow: tipoPago === 'credito' ? '0 2px 8px rgba(0,0,0,0.15)' : 'none' }}
+                  >
+                    📋 Fiao
+                  </button>
+                </div>
+              </div>
+
+              {/* Blocked warning only shown for Fiao + blocked client */}
+
+              {/* Blocked warning */}
+              {isBlocked && (
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', padding: '0.625rem 0.75rem', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: '8px', color: '#ef4444', fontSize: '0.8rem' }}>
+                  <AlertCircle size={14} style={{ flexShrink: 0, marginTop: '0.1rem' }} />
+                  Este cliente ha alcanzado su límite de crédito. No se pueden registrar ventas a crédito.
                 </div>
               )}
 
-              <button 
-                className="btn btn-primary w-full py-4 text-lg flex items-center justify-center gap-2"
-                disabled={cart.length === 0 || (isCredit && !selectedClient) || (isCredit && selectedClient === '3')}
-              >
-                <Check size={20} />
-                Registrar Venta
-              </button>
+              {/* Error */}
+              {error && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.625rem 0.75rem', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '8px', color: '#ef4444', fontSize: '0.8rem' }}>
+                  <AlertCircle size={14} />
+                  {error}
+                </div>
+              )}
+
+              {/* Buttons */}
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button
+                  onClick={() => { setCart([]); setError(''); }}
+                  disabled={cart.length === 0}
+                  style={{ padding: '0.75rem 1rem', borderRadius: '10px', border: '1px solid var(--border)', background: 'var(--bg-secondary)', cursor: cart.length > 0 ? 'pointer' : 'not-allowed', color: cart.length > 0 ? 'var(--text-muted)' : 'var(--border)', fontSize: '0.85rem', fontWeight: 600, flexShrink: 0, opacity: cart.length === 0 ? 0.4 : 1 }}
+                >
+                  Limpiar
+                </button>
+                <button
+                  onClick={handleVenta}
+                  disabled={!canSubmit}
+                  style={{
+                    flex: 1, padding: '0.875rem', borderRadius: '10px', border: 'none', cursor: canSubmit ? 'pointer' : 'not-allowed', fontWeight: 700, fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', transition: 'all 0.2s ease',
+                    background: canSubmit ? 'linear-gradient(135deg, var(--primary), var(--primary-dark, #059669))' : 'var(--border)',
+                    color: canSubmit ? 'white' : 'var(--text-muted)',
+                  }}
+                >
+                  <Check size={18} />
+                  {submitting ? 'Registrando...' : 'Registrar Venta'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
