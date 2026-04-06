@@ -6,6 +6,7 @@ import { Producto } from "./entity/Producto";
 import { Venta } from "./entity/Venta";
 import { VentaDetalle } from "./entity/VentaDetalle";
 import { Pago } from "./entity/Pago";
+import { Usuario } from "./entity/Usuario";
 
 const app = express();
 app.use(cors());
@@ -33,6 +34,46 @@ const startServer = async () => {
     const productRepository = AppDataSource.getRepository(Producto);
     const saleRepository = AppDataSource.getRepository(Venta);
     const paymentRepository = AppDataSource.getRepository(Pago);
+    const userRepository = AppDataSource.getRepository(Usuario);
+
+    // --- USUARIOS & AUTH ---
+    app.post("/api/login", async (req, res) => {
+        const { username, password } = req.body;
+        const user = await userRepository.findOneBy({ username });
+        
+        if (user && user.password === password) { // En producción usar bcrypt
+            const { password, ...userWithoutPassword } = user;
+            res.json({ success: true, user: userWithoutPassword });
+        } else {
+            res.status(401).json({ success: false, message: "Credenciales inválidas" });
+        }
+    });
+
+    app.get("/api/usuarios", async (req, res) => {
+        const users = await userRepository.find({
+            select: ["id", "username", "rol", "createdAt"]
+        });
+        res.json(users);
+    });
+
+    app.post("/api/usuarios", async (req, res) => {
+        try {
+            const { username, password, rol } = req.body;
+            const newUser = new Usuario();
+            newUser.username = username;
+            newUser.password = password;
+            newUser.rol = rol || 'empleado';
+            await userRepository.save(newUser);
+            res.status(201).json({ message: "Usuario creado" });
+        } catch (error) {
+            res.status(400).json({ message: "Error al crear usuario (posible nombre duplicado)" });
+        }
+    });
+
+    app.delete("/api/usuarios/:id", async (req, res) => {
+        await userRepository.delete(req.params.id);
+        res.json({ message: "Usuario eliminado" });
+    });
 
     // --- PRODUCTOS ---
     app.get("/api/productos", async (req, res) => {

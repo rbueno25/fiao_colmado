@@ -5,6 +5,7 @@ import { Producto } from "./entity/Producto"
 import { Venta } from "./entity/Venta"
 import { VentaDetalle } from "./entity/VentaDetalle"
 import { Pago } from "./entity/Pago"
+import { Usuario } from "./entity/Usuario"
 
 export const AppDataSource = new DataSource({
     type: process.env.DB_HOST ? "mysql" : "sqlite",
@@ -22,7 +23,7 @@ export const AppDataSource = new DataSource({
     } : {}),
     synchronize: false, // Evitar colisiones con init.sql
     logging: false,
-    entities: [Cliente, Producto, Venta, VentaDetalle, Pago],
+    entities: [Cliente, Producto, Venta, VentaDetalle, Pago, Usuario],
     migrations: [],
     subscribers: [],
 })
