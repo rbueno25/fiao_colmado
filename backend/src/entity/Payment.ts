@@ -1,8 +1,8 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn } from "typeorm";
-import { Client } from "./Client";
+import { Cliente } from "./Client";
 
-@Entity()
-export class Payment {
+@Entity({ name: "pago" })
+export class Pago {
     @PrimaryGeneratedColumn()
     id: number;
 

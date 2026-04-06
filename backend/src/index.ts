@@ -1,11 +1,11 @@
 import express from "express";
 import cors from "cors";
 import { AppDataSource } from "./data-source";
-import { Client } from "./entity/Client";
-import { Product } from "./entity/Product";
-import { Sale } from "./entity/Sale";
-import { SaleDetail } from "./entity/SaleDetail";
-import { Payment } from "./entity/Payment";
+import { Cliente } from "./entity/Cliente";
+import { Producto } from "./entity/Producto";
+import { Venta } from "./entity/Venta";
+import { VentaDetalle } from "./entity/VentaDetalle";
+import { Pago } from "./entity/Pago";
 
 const app = express();
 app.use(cors());
@@ -29,10 +29,10 @@ const startServer = async () => {
     }
 
     // Repositories
-    const clientRepository = AppDataSource.getRepository(Client);
-    const productRepository = AppDataSource.getRepository(Product);
-    const saleRepository = AppDataSource.getRepository(Sale);
-    const paymentRepository = AppDataSource.getRepository(Payment);
+    const clientRepository = AppDataSource.getRepository(Cliente);
+    const productRepository = AppDataSource.getRepository(Producto);
+    const saleRepository = AppDataSource.getRepository(Venta);
+    const paymentRepository = AppDataSource.getRepository(Pago);
 
     // --- PRODUCTOS ---
     app.get("/api/productos", async (req, res) => {
@@ -53,11 +53,11 @@ const startServer = async () => {
         try {
             const { clienteId, items, tipo, montoTotal } = req.body; // items: [{id, cantidad, subtotal}]
             
-            const sale = new Sale();
+            const venta = new Venta();
             if (clienteId) {
                 const client = await clientRepository.findOneBy({ id: clienteId });
                 if (client) {
-                    sale.cliente = client;
+                    venta.cliente = client;
                     if (tipo === 'credito') {
                         client.deuda = Number(client.deuda) + Number(montoTotal);
                         await clientRepository.save(client);
@@ -65,18 +65,18 @@ const startServer = async () => {
                 }
             }
             
-            sale.montoTotal = montoTotal;
-            sale.tipo = tipo;
-            sale.detalles = [];
+            venta.montoTotal = montoTotal;
+            venta.tipo = tipo;
+            venta.detalles = [];
 
             for (const item of items) {
                 const product = await productRepository.findOneBy({ id: item.id });
                 if (product) {
-                    const detail = new SaleDetail();
+                    const detail = new VentaDetalle();
                     detail.producto = product;
                     detail.cantidad = item.cantidad;
                     detail.subtotal = item.subtotal;
-                    sale.detalles.push(detail);
+                    venta.detalles.push(detail);
 
                     // Update stock
                     product.stock -= item.cantidad;
@@ -84,7 +84,7 @@ const startServer = async () => {
                 }
             }
 
-            const savedSale = await saleRepository.save(sale);
+            const savedSale = await saleRepository.save(venta);
             res.status(201).json(savedSale);
         } catch (error) {
             console.error(error);
@@ -119,7 +119,7 @@ const startServer = async () => {
             const client = await clientRepository.findOneBy({ id: clienteId });
             if (!client) return res.status(404).json({ message: "Cliente no encontrado" });
 
-            const payment = new Payment();
+            const payment = new Pago();
             payment.cliente = client;
             payment.monto = Number(monto);
             payment.nota = nota || '';

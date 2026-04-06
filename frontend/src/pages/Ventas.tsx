@@ -39,16 +39,27 @@ export default function Ventas() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [prodRes, clientRes] = await Promise.all([
-        fetch(`${API}/api/productos`),
-        fetch(`${API}/api/clientes`)
-      ]);
-      const prodData = await prodRes.json();
-      const clientData = await clientRes.json();
-      setProducts(Array.isArray(prodData) ? prodData : []);
+      const resp = await fetch(`${API}/api/productos`);
+      if (!resp.ok) throw new Error('Error fetching products');
+      const prodData = await resp.json();
+      
+      const clientResp = await fetch(`${API}/api/clientes`);
+      if (!clientResp.ok) throw new Error('Error fetching clients');
+      const clientData = await clientResp.json();
+
+      console.log('API Products:', prodData);
+      
+      const formattedProds = Array.isArray(prodData) ? prodData.map((p: any) => ({
+        ...p,
+        precio: Number(p.precio),
+        stock: Number(p.stock)
+      })) : [];
+      
+      setProducts(formattedProds);
       setClients(Array.isArray(clientData) ? clientData : []);
-    } catch {
-      // silently handle
+    } catch (err) {
+      console.error('Fetch error:', err);
+      setError('No se pudieron cargar los datos. Verifica la conexión con el servidor.');
     } finally {
       setLoading(false);
     }
@@ -159,7 +170,7 @@ export default function Ventas() {
           <h1 className="text-h2">Punto de Venta</h1>
           <p className="text-muted">Registra ventas al contado o a crédito (fiao).</p>
         </div>
-        <button onClick={fetchData} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 1rem', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--bg-secondary)', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+        <button onClick={fetchData} className="btn btn-secondary">
           <RefreshCw size={15} /> Actualizar
         </button>
       </div>
@@ -398,18 +409,16 @@ export default function Ventas() {
                 <button
                   onClick={() => { setCart([]); setError(''); }}
                   disabled={cart.length === 0}
-                  style={{ padding: '0.75rem 1rem', borderRadius: '10px', border: '1px solid var(--border)', background: 'var(--bg-secondary)', cursor: cart.length > 0 ? 'pointer' : 'not-allowed', color: cart.length > 0 ? 'var(--text-muted)' : 'var(--border)', fontSize: '0.85rem', fontWeight: 600, flexShrink: 0, opacity: cart.length === 0 ? 0.4 : 1 }}
+                  className="btn btn-secondary"
+                  style={{ opacity: cart.length === 0 ? 0.5 : 1, padding: '0.875rem 1.25rem' }}
                 >
                   Limpiar
                 </button>
                 <button
                   onClick={handleVenta}
                   disabled={!canSubmit}
-                  style={{
-                    flex: 1, padding: '0.875rem', borderRadius: '10px', border: 'none', cursor: canSubmit ? 'pointer' : 'not-allowed', fontWeight: 700, fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', transition: 'all 0.2s ease',
-                    background: canSubmit ? 'linear-gradient(135deg, var(--primary), var(--primary-dark, #059669))' : 'var(--border)',
-                    color: canSubmit ? 'white' : 'var(--text-muted)',
-                  }}
+                  className="btn btn-primary"
+                  style={{ flex: 1, opacity: canSubmit ? 1 : 0.5, padding: '0.875rem' }}
                 >
                   <Check size={18} />
                   {submitting ? 'Registrando...' : 'Registrar Venta'}

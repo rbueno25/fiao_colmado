@@ -1,9 +1,9 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, OneToMany, JoinColumn } from "typeorm";
 import { Client } from "./Client";
-import { SaleDetail } from "./SaleDetail";
+import { VentaDetalle } from "./SaleDetail";
 
-@Entity()
-export class Sale {
+@Entity({ name: "venta" })
+export class Venta {
     @PrimaryGeneratedColumn()
     id: number;
 
@@ -20,6 +20,6 @@ export class Sale {
     @CreateDateColumn()
     fecha: Date;
 
-    @OneToMany(() => SaleDetail, (detail) => detail.venta, { cascade: true })
-    detalles: SaleDetail[];
+    @OneToMany(() => VentaDetalle, (detail) => detail.venta, { cascade: true })
+    detalles: VentaDetalle[];
 }

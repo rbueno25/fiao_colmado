@@ -1,19 +1,19 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from "typeorm";
-import { Sale } from "./Sale";
-import { Product } from "./Product";
+import { Venta } from "./Sale";
+import { Producto } from "./Product";
 
-@Entity()
-export class SaleDetail {
+@Entity({ name: "venta_detalle" })
+export class VentaDetalle {
     @PrimaryGeneratedColumn()
     id: number;
 
-    @ManyToOne(() => Sale, (sale) => sale.detalles)
+    @ManyToOne(() => Venta, (venta) => venta.detalles)
     @JoinColumn({ name: "venta_id" })
-    venta: Sale;
+    venta: Venta;
 
-    @ManyToOne(() => Product)
+    @ManyToOne(() => Producto)
     @JoinColumn({ name: "producto_id" })
-    producto: Product;
+    producto: Producto;
 
     @Column()
     cantidad: number;

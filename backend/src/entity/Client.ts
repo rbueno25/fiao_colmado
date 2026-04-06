@@ -1,7 +1,7 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, BeforeInsert, BeforeUpdate } from "typeorm"
 
 @Entity("cliente")
-export class Client {
+export class Cliente {
 
     @PrimaryGeneratedColumn()
     id: number

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { DollarSign, Search, CheckCircle, Clock, User, TrendingDown, AlertCircle, X } from 'lucide-react';
+import { DollarSign, Search, CheckCircle, Clock, User, TrendingDown, AlertCircle, X, FileText } from 'lucide-react';
 
 interface Client {
   id: number;
@@ -38,7 +38,10 @@ export default function Pagos() {
       ]);
       const clientsData = await clientsRes.json();
       const paymentsData = await paymentsRes.json();
-      setClients(clientsData.filter((c: Client) => Number(c.deuda) > 0));
+      const sortedClients = clientsData
+        .filter((c: Client) => Number(c.deuda) > 0)
+        .sort((a: Client, b: Client) => Number(b.deuda) - Number(a.deuda));
+      setClients(sortedClients);
       setPayments(paymentsData.slice(0, 20)); // últimos 20 pagos
     } catch {
       // silently handle
@@ -96,6 +99,33 @@ export default function Pagos() {
     }
   };
 
+  const downloadMorososReport = () => {
+    const today = new Date().toLocaleDateString('es-DO');
+    const morosos = clients.filter(c => Number(c.deuda) > 0).sort((a,b) => Number(b.deuda) - Number(a.deuda));
+    const content = `
+==========================================
+       REPORTE DE CLIENTES MOROSOS
+==========================================
+Fecha: ${today}
+Total en Deuda: RD$ ${totalDeuda.toLocaleString()}
+Cantidad de Clientes: ${morosos.length}
+------------------------------------------
+
+${morosos.map((c, i) => `${(i+1).toString().padStart(2)}. ${c.nombre.padEnd(25)} | RD$ ${Number(c.deuda).toLocaleString()}`).join('\n')}
+
+==========================================
+      FIAO APP - USO ADMINISTRATIVO
+==========================================
+    `.trim();
+
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `reporte_morosos_${today.replace(/\//g, '-')}.txt`;
+    link.click();
+  };
+
   return (
     <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       {/* Header */}
@@ -103,6 +133,13 @@ export default function Pagos() {
         <div>
           <h1 className="text-h2">Cobros y Pagos</h1>
           <p className="text-muted">Registra abonos y gestiona las deudas de tus clientes.</p>
+          <button 
+            onClick={downloadMorososReport} 
+            className="btn btn-secondary" 
+            style={{ marginTop: '0.75rem', borderColor: '#ef4444', color: '#ef4444', background: 'rgba(239, 68, 68, 0.05)' }}
+          >
+            <FileText size={16} /> Generar Reporte de Morosos
+          </button>
         </div>
         <div className="card" style={{ padding: '1rem 1.5rem', background: 'linear-gradient(135deg, #ef4444, #dc2626)', color: 'white', borderRadius: '12px', border: 'none', minWidth: '200px' }}>
           <div style={{ fontSize: '0.75rem', opacity: 0.85, marginBottom: '0.25rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total en Deudas</div>
@@ -228,14 +265,14 @@ export default function Pagos() {
                       <button
                         key={v}
                         onClick={() => setMonto(String(Math.min(v, Number(selectedClient.deuda))))}
-                        style={{ padding: '0.3rem 0.7rem', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--bg-secondary)', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)' }}
+                        className="btn btn-secondary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
                       >
                         RD$ {v}
                       </button>
                     ))}
                     <button
                       onClick={() => setMonto(String(selectedClient.deuda))}
-                      style={{ padding: '0.3rem 0.7rem', borderRadius: '6px', border: '1px solid var(--primary)', background: 'var(--primary-light)', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 700, color: 'var(--primary)' }}
+                      className="btn btn-secondary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem', borderColor: 'var(--primary)', color: 'var(--primary)' }}
                     >
                       Pago total
                     </button>
@@ -279,9 +316,10 @@ export default function Pagos() {
                 <button
                   onClick={handlePago}
                   disabled={loading}
-                  style={{ padding: '0.875rem', borderRadius: '10px', background: loading ? 'var(--border)' : 'linear-gradient(135deg, var(--primary), var(--primary-dark))', color: 'white', fontWeight: 700, fontSize: '1rem', cursor: loading ? 'not-allowed' : 'pointer', border: 'none', transition: 'all 0.2s ease' }}
+                  className="btn btn-primary confirm-payment-btn"
+                  style={{ width: '100%', padding: '0.875rem', marginTop: '1rem' }}
                 >
-                  {loading ? 'Registrando...' : '✓ Confirmar Pago'}
+                  {loading ? 'Registrando...' : 'Confirmar Pago'}
                 </button>
               </div>
             )}

@@ -166,7 +166,10 @@ export default function Clientes() {
                 else if (porcentaje >= 80) deudaColorClass = 'text-warning';
 
                 return (
-                  <tr key={client.id} style={{ borderBottom: '1px solid hsl(var(--border-color))' }}>
+                  <tr key={client.id} style={{ 
+                    borderBottom: '1px solid hsl(var(--border-color))',
+                    backgroundColor: client.estado === 'bloqueado' ? 'rgba(239, 68, 68, 0.02)' : 'transparent'
+                  }}>
                     <td style={{ padding: '1rem 0.5rem', fontWeight: 500 }}>{client.nombre}</td>
                     <td style={{ padding: '1rem 0.5rem', color: 'hsl(var(--color-text-muted))', fontSize: '0.875rem' }}>{client.telefono || 'Sin registrar'}</td>
                     <td style={{ padding: '1rem 0.5rem' }}>
@@ -175,16 +178,20 @@ export default function Clientes() {
                     <td style={{ padding: '1rem 0.5rem', color: 'hsl(var(--color-text-muted))' }}>RD$ {Number(client.limite).toLocaleString()}</td>
                     <td style={{ padding: '1rem 0.5rem' }}>
                       {client.estado === 'activo' ? (
-                        <span className="badge badge-success">Activo</span>
+                        porcentaje >= 80 ? (
+                          <span className="badge badge-warning" style={{ background: '#fef3c7', color: '#92400e', border: '1px solid #fcd34d' }}>Cerca del Límite</span>
+                        ) : (
+                          <span className="badge badge-success" style={{ background: '#dcfce7', color: '#166534', border: '1px solid #86efac' }}>Activo</span>
+                        )
                       ) : (
-                        <span className="badge badge-danger">Bloqueado</span>
+                        <span className="badge badge-danger" style={{ background: '#fee2e2', color: '#991b1b', border: '1px solid #fecaca' }}>Bloqueado</span>
                       )}
                     </td>
                     <td style={{ padding: '1rem 0.5rem', textAlign: 'right' }}>
-                      <button className="btn btn-secondary" style={{ padding: '0.4rem', border: 'none', marginRight: '0.5rem', background: 'transparent', color: 'hsl(var(--color-text-muted))' }} onClick={() => handleOpenModal(client)} title="Editar">
+                      <button className="btn btn-secondary" onClick={() => handleOpenModal(client)} title="Editar">
                         <Edit2 size={18} />
                       </button>
-                      <button className="btn btn-danger" style={{ padding: '0.4rem', border: 'none', background: 'transparent' }} onClick={() => handleDelete(client.id)} title="Eliminar">
+                      <button className="btn btn-danger" onClick={() => handleDelete(client.id)} title="Eliminar">
                         <Trash2 size={18} />
                       </button>
                     </td>
