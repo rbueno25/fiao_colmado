@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Search, ShoppingCart, User, Plus, Minus, X, Check, AlertCircle, Tag, RefreshCw, Package } from 'lucide-react';
+import Notification from '../components/Notification';
+import type { NotificationType } from '../components/Notification';
 
 interface Product {
   id: number;
@@ -34,8 +36,8 @@ export default function Ventas() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
-  const [error, setError] = useState('');
   const [recentSales, setRecentSales] = useState<any[]>([]);
+  const [notification, setNotification] = useState<{ message: string; type: NotificationType } | null>(null);
 
   const fetchData = async () => {
     setLoading(true);
@@ -62,7 +64,7 @@ export default function Ventas() {
       setClients(Array.isArray(clientData) ? clientData : []);
     } catch (err) {
       console.error('Fetch error:', err);
-      setError('No se pudieron cargar los datos.');
+      setNotification({ message: 'No se pudieron cargar los datos de productos y clientes.', type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -81,11 +83,17 @@ export default function Ventas() {
   });
 
   const addToCart = (product: Product) => {
-    if (product.stock <= 0) return;
+    if (product.stock <= 0) {
+      setNotification({ message: `No hay stock disponible para ${product.nombre}.`, type: 'warning' });
+      return;
+    }
     setCart(prev => {
       const existing = prev.find(item => item.id === product.id);
       if (existing) {
-        if (existing.cantidad >= product.stock) return prev;
+        if (existing.cantidad >= product.stock) {
+          setNotification({ message: 'Has alcanzado el límite de stock para este producto.', type: 'warning' });
+          return prev;
+        }
         return prev.map(item =>
           item.id === product.id ? { ...item, cantidad: item.cantidad + 1 } : item
         );
@@ -103,7 +111,10 @@ export default function Ventas() {
       if (item.id === productId) {
         const newQty = item.cantidad + delta;
         if (newQty <= 0) return item; 
-        if (newQty > item.stock) return item; 
+        if (newQty > item.stock) {
+          setNotification({ message: `Solo hay ${item.stock} unidades disponibles.`, type: 'warning' });
+          return item;
+        }
         return { ...item, cantidad: newQty };
       }
       return item;
@@ -114,22 +125,31 @@ export default function Ventas() {
 
   const isBlocked = tipoPago === 'credito' && selectedClient &&
     selectedClient.limite !== undefined &&
-    Number(selectedClient.deuda) >= Number(selectedClient.limite);
+    Number(selectedClient.deuda) + total > Number(selectedClient.limite);
 
-  const canSubmit = cart.length > 0 &&
-    !submitting &&
-    selectedClient !== null && 
-    (tipoPago === 'contado' || (tipoPago === 'credito' && !isBlocked));
+  const canSubmit = !submitting && cart.length > 0;
 
   const handleVenta = async () => {
-    if (!canSubmit) {
-      if (!selectedClient) {
-        setError('¡ERROR! Debes seleccionar un cliente.');
-      }
+    if (cart.length === 0) {
+      setNotification({ message: 'El carrito está vacío.', type: 'warning' });
       return;
     }
+
+    if (!selectedClient) {
+      setNotification({ message: '¡Atención! Selecciona un cliente para continuar.', type: 'error' });
+      return;
+    }
+
+    if (tipoPago === 'credito' && isBlocked) {
+      const remainingLimit = Number(selectedClient.limite) - Number(selectedClient.deuda);
+      setNotification({ 
+        message: `Límite de crédito excedido. El cliente solo tiene RD$ ${remainingLimit} disponible y la compra es de RD$ ${total}.`, 
+        type: 'error' 
+      });
+      return;
+    }
+
     setSubmitting(true);
-    setError('');
     try {
       const payload = {
         clienteId: selectedClient?.id || null,
@@ -150,6 +170,7 @@ export default function Ventas() {
 
       if (res.ok) {
         setSuccess(true);
+        setNotification({ message: 'Venta registrada con éxito.', type: 'success' });
         setCart([]);
         setSelectedClient(null);
         setTipoPago('contado');
@@ -157,10 +178,10 @@ export default function Ventas() {
         setTimeout(() => setSuccess(false), 4000);
       } else {
         const err = await res.json();
-        setError(err.message || 'Error al registrar la venta.');
+        setNotification({ message: err.message || 'Error al registrar la venta.', type: 'error' });
       }
     } catch {
-      setError('Error de conexión.');
+      setNotification({ message: 'Error de conexión con el servidor.', type: 'error' });
     } finally {
       setSubmitting(false);
     }
@@ -178,6 +199,14 @@ export default function Ventas() {
           <RefreshCw size={15} /> Actualizar
         </button>
       </div>
+
+      {notification && (
+        <Notification 
+          message={notification.message} 
+          type={notification.type} 
+          onClose={() => setNotification(null)} 
+        />
+      )}
 
       {success && (
         <div style={{ background: 'linear-gradient(135deg, #10b981, #059669)', color: 'white', padding: '0.875rem', borderRadius: '10px' }}>
@@ -330,9 +359,7 @@ export default function Ventas() {
                 <button onClick={() => setTipoPago('credito')} className={`btn ${tipoPago === 'credito' ? 'btn-primary' : 'btn-secondary'}`} style={{ flex: 1 }}>📋 Fiao</button>
               </div>
 
-              {error && <div style={{ color: 'red', fontSize: '0.75rem', marginBottom: '0.5rem' }}>{error}</div>}
-
-              <button disabled={!canSubmit} onClick={handleVenta} className="btn btn-primary" style={{ width: '100%', padding: '1rem', fontSize: '1rem' }}>
+              <button onClick={handleVenta} className="btn btn-primary" style={{ width: '100%', padding: '1rem', fontSize: '1rem', opacity: submitting ? 0.7 : 1 }}>
                 {submitting ? '...' : 'CONFIRMAR VENTA'}
               </button>
             </div>
